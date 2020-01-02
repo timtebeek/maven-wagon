@@ -19,19 +19,20 @@ package org.apache.maven.wagon.shared.http;
  * under the License.
  */
 
-import org.apache.commons.io.IOUtils;
 import org.apache.maven.wagon.TransferFailedException;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 
+import javax.swing.text.MutableAttributeSet;
+import javax.swing.text.html.HTML;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.parser.ParserDelegator;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -65,36 +66,56 @@ public class HtmlFileListParser
      * @return the file list.
      * @throws TransferFailedException if there was a problem fetching the raw html.
      */
-    public static List<String> parseFileList( String baseurl, InputStream stream )
-        throws TransferFailedException
+    public static List<String> parseFileList( String baseurl, InputStream stream ) throws TransferFailedException
     {
         try
         {
-            URI baseURI = new URI( baseurl );
-            // to make debugging easier, start with a string. This is assuming UTF-8, which might not be a safe
-            // assumption.
-            String content = IOUtils.toString( stream, "utf-8" );
-            Document doc = Jsoup.parse( content, baseurl );
-            Elements links = doc.select( "a[href]" );
-            Set<String> results = new HashSet<String>();
-            for ( Element link : links )
+            final Set<String> list = new HashSet<>();
+            final URI baseURI = new URI( baseurl );
+
+            ParserDelegator parserDelegator = new ParserDelegator();
+            HTMLEditorKit.ParserCallback parserCallback = new HTMLEditorKit.ParserCallback()
             {
-                /*
-                 * The abs:href loses directories, so we deal with absolute paths ourselves below in cleanLink
-                 */
-                String target = link.attr( "href" );
-                if ( target != null )
+                public void handleText( final char[] data, final int pos )
                 {
-                    String clean = cleanLink( baseURI, target );
-                    if ( isAcceptableLink( clean ) )
+                }
+
+                public void handleStartTag( HTML.Tag tag, MutableAttributeSet attribute, int pos )
+                {
+                    if ( tag == HTML.Tag.A )
                     {
-                        results.add( clean );
+                        String address = (String) attribute.getAttribute( HTML.Attribute.HREF );
+                         // The abs:href loses directories, so we deal with absolute paths ourselves below in cleanLink
+                        if ( address != null )
+                        {
+                            String clean = cleanLink( baseURI, address );
+                            if ( isAcceptableLink( clean ) )
+                            {
+                                list.add( clean );
+                            }
+                        }
                     }
                 }
 
-            }
+                public void handleEndTag( HTML.Tag t, final int pos )
+                {
+                }
 
-            return new ArrayList<String>( results );
+                public void handleSimpleTag( HTML.Tag t, MutableAttributeSet a, final int pos )
+                {
+                }
+
+                public void handleComment( final char[] data, final int pos )
+                {
+                }
+
+                public void handleError( final java.lang.String errMsg, final int pos )
+                {
+                }
+            };
+            parserDelegator.parse( new InputStreamReader( stream, StandardCharsets.UTF_8 ), parserCallback, false );
+
+            return new ArrayList<>( list );
         }
         catch ( URISyntaxException e )
         {
@@ -131,11 +152,7 @@ public class HtmlFileListParser
 
             ret = URLDecoder.decode( ret, "UTF-8" );
         }
-        catch ( URISyntaxException e )
-        {
-            // ignore
-        }
-        catch ( UnsupportedEncodingException e )
+        catch ( URISyntaxException | UnsupportedEncodingException e )
         {
             // ignore
         }
@@ -160,5 +177,4 @@ public class HtmlFileListParser
 
         return true;
     }
-
 }
