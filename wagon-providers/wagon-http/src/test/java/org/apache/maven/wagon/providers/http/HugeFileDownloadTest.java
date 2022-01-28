@@ -198,7 +198,7 @@ public class HugeFileDownloadTest
         final OpenOption[] options = { StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW,
                                        StandardOpenOption.SPARSE };
 
-        try ( final SeekableByteChannel channel = Files.newByteChannel( hugeFile.toPath(), options ) )
+        try ( SeekableByteChannel channel = Files.newByteChannel( hugeFile.toPath(), options ) )
         {
             channel.position( HUGE_FILE_SIZE );
             channel.write( buf );
